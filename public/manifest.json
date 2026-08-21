@@ -1,0 +1,16 @@
+{
+  "name": "M2MBrasil Produtos Personalizados",
+  "short_name": "M2MBrasil",
+  "description": "Plataforma de gestão e loja virtual de produtos personalizados M2MBrasil",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B132B",
+  "theme_color": "#1D4ED8",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}

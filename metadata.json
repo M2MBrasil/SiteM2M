@@ -1,0 +1,6 @@
+{
+  "name": "M2MBrasil Produtos Personalizados",
+  "description": "Sistema completo de gestão, loja virtual, personalização e orçamentos da M2MBrasil Produtos Personalizados.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="m2mGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2563EB" />
+      <stop offset="50%" stop-color="#1D4ED8" />
+      <stop offset="100%" stop-color="#0F172A" />
+    </linearGradient>
+    <linearGradient id="silverGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="50%" stop-color="#E2E8F0" />
+      <stop offset="100%" stop-color="#94A3B8" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="128" fill="url(#m2mGrad)" />
+  <circle cx="256" cy="256" r="210" fill="none" stroke="url(#silverGrad)" stroke-width="8" stroke-dasharray="16 8" opacity="0.3" />
+  <path d="M120 360 V180 L180 280 L240 180 V360 M272 360 V180 L332 280 L392 180 V360" fill="none" stroke="url(#silverGrad)" stroke-width="32" stroke-linecap="round" stroke-linejoin="round" />
+  <text x="256" y="420" text-anchor="middle" fill="#93C5FD" font-family="system-ui, sans-serif" font-weight="900" font-size="34" letter-spacing="4">M2MBRASIL</text>
+</svg>
