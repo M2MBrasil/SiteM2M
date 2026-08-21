@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useSyncExternalStore } from 'react';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { CartProvider } from '@/contexts/CartContext';
 import { NotificationProvider } from '@/contexts/NotificationContext';
@@ -21,6 +21,7 @@ import {
   getCategories,
   getColors,
   getSizes,
+  subscribeDb,
 } from '@/lib/storage';
 import { Order, Product } from '@/lib/types';
 
@@ -52,6 +53,10 @@ function MainApp() {
     setColors(getColors());
     setSizes(getSizes());
   };
+
+  useEffect(() => {
+    return subscribeDb(reloadData);
+  }, []);
 
   const handleSelectProduct = (product: Product) => {
     setSelectedProduct(product);
@@ -199,7 +204,28 @@ function MainApp() {
   );
 }
 
+const emptySubscribe = () => () => {};
+
 export default function Page() {
+  const isMounted = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false
+  );
+
+  if (!isMounted) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white font-black text-lg animate-pulse shadow-lg shadow-blue-900/50">
+            M2M
+          </div>
+          <p className="text-xs text-blue-400 font-medium">Carregando sistema...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <NotificationProvider>
       <AuthProvider>

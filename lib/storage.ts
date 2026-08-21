@@ -102,6 +102,17 @@ export function getDb(): AppDatabase {
         currentSettings.whatsappAreaCode = '15';
         currentSettings.whatsappNumber = '996019227';
       }
+      // If stored settings had the old demo mock address, clean them out
+      if (currentSettings.address === 'Av. Paulista, 1000 - Bela Vista') {
+        currentSettings.address = '';
+        currentSettings.number = '';
+        currentSettings.complement = '';
+        currentSettings.neighborhood = '';
+        currentSettings.city = '';
+        currentSettings.state = '';
+        currentSettings.zipCode = '';
+        currentSettings.cnpj = '';
+      }
       // Ensure official Admin MauricioM2M is always properly registered with senha 78645524
       const existingUsers: User[] = parsed.users || INITIAL_USERS;
       const adminIndex = existingUsers.findIndex((u) => u.role === 'admin' || u.email.toLowerCase() === 'mauriciom2m' || u.id === 'usr-admin-mauricio');
@@ -197,7 +208,7 @@ export function getProductById(id: string): Product | undefined {
 
 export function saveProduct(productData: Partial<Product> & { name: string }): Product {
   const db = getDb();
-  const isNew = !productData.id;
+  const isNew = !productData.id || !db.products.some((p) => p.id === productData.id);
   const now = new Date().toISOString();
 
   let code = productData.code;
@@ -208,7 +219,7 @@ export function saveProduct(productData: Partial<Product> & { name: string }): P
 
   const slug =
     productData.slug ||
-    productData.name
+    (productData.name || 'produto')
       .toLowerCase()
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
@@ -218,7 +229,7 @@ export function saveProduct(productData: Partial<Product> & { name: string }): P
   const category = db.categories.find((c) => c.id === productData.categoryId);
 
   const product: Product = {
-    id: productData.id || `prod-${Date.now()}`,
+    id: productData.id && db.products.some((p) => p.id === productData.id) ? productData.id : (productData.id || `prod-${Date.now()}`),
     code,
     name: productData.name,
     slug,
@@ -234,7 +245,15 @@ export function saveProduct(productData: Partial<Product> & { name: string }): P
     active: productData.active !== undefined ? productData.active : true,
     featured: !!productData.featured,
     isPromotion: !!productData.isPromotion,
-    images: productData.images || [],
+    images: productData.images && productData.images.length > 0 ? productData.images : [
+      {
+        id: `img-${Date.now()}`,
+        productId: '',
+        url: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=600',
+        isPrimary: true,
+        order: 1,
+      },
+    ],
     availableColors: productData.availableColors || db.colors.slice(0, 4),
     availableSizes: productData.availableSizes || db.sizes.slice(1, 5),
     variants: productData.variants || [],
@@ -245,7 +264,7 @@ export function saveProduct(productData: Partial<Product> & { name: string }): P
   };
 
   const updatedProducts = isNew
-    ? [product, ...db.products]
+    ? [product, ...db.products.filter((p) => p.id !== product.id)]
     : db.products.map((p) => (p.id === product.id ? product : p));
 
   saveDb({ ...db, products: updatedProducts });
@@ -332,12 +351,12 @@ export function getCustomerById(id: string): Customer | undefined {
 
 export function saveCustomer(custData: Partial<Customer> & { name: string; phone: string }): Customer {
   const db = getDb();
-  const isNew = !custData.id;
+  const isNew = !custData.id || !db.customers.some((c) => c.id === custData.id);
   const nextNum = db.customers.length + 101;
   const code = custData.code || `CLI-${String(nextNum).padStart(6, '0')}`;
 
   const customer: Customer = {
-    id: custData.id || `cust-${Date.now()}`,
+    id: custData.id && db.customers.some((c) => c.id === custData.id) ? custData.id : (custData.id || `cust-${Date.now()}`),
     userId: custData.userId,
     code,
     name: custData.name,
@@ -359,7 +378,7 @@ export function saveCustomer(custData: Partial<Customer> & { name: string; phone
   };
 
   const updated = isNew
-    ? [customer, ...db.customers]
+    ? [customer, ...db.customers.filter((c) => c.id !== customer.id)]
     : db.customers.map((c) => (c.id === customer.id ? customer : c));
 
   saveDb({ ...db, customers: updated });

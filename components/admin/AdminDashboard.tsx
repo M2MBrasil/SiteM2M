@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   LayoutDashboard,
   ShoppingBag,
@@ -31,6 +31,13 @@ import {
   ArrowUpRight,
   Sparkles,
   Image as ImageIcon,
+  MapPin,
+  Phone,
+  Mail,
+  MessageCircle,
+  ExternalLink,
+  X,
+  Check,
 } from 'lucide-react';
 
 import {
@@ -61,8 +68,10 @@ import {
   saveOrder,
   updateOrderStatus,
   saveQuote,
+  deleteQuote,
   convertQuoteToOrder,
-
+  saveCustomer,
+  deleteCustomer,
   saveCoupon,
   deleteCoupon,
   saveCompanySettings,
@@ -75,6 +84,7 @@ import {
   exportDatabaseJSON,
   importDatabaseJSON,
   resetDatabase,
+  subscribeDb,
 } from '@/lib/storage';
 import {
   formatBRL,
@@ -148,6 +158,15 @@ export function AdminDashboard() {
   const [editingCoupon, setEditingCoupon] = useState<Coupon | null>(null);
   const [isCouponModalOpen, setIsCouponModalOpen] = useState(false);
 
+  // Customer modal & search states
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
+  const [customerSearch, setCustomerSearch] = useState('');
+
+  // Quote modal state
+  const [selectedQuote, setSelectedQuote] = useState<Quote | null>(null);
+
   // Order filters
   const [orderSearch, setOrderSearch] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState<string>('all');
@@ -158,6 +177,44 @@ export function AdminDashboard() {
 
   // Settings form
   const [settingsForm, setSettingsForm] = useState<CompanySettings>(settings);
+  const [isSearchingCep, setIsSearchingCep] = useState(false);
+
+  useEffect(() => {
+    return subscribeDb(() => {
+      triggerRefresh();
+      setSettingsForm(getCompanySettings());
+    });
+  }, []);
+
+  const handleSearchCep = async (cepValue: string) => {
+    const cleanCep = (cepValue || '').replace(/\D/g, '');
+    if (cleanCep.length !== 8) {
+      showToast('warning', 'CEP Inválido', 'O CEP deve conter 8 dígitos.');
+      return;
+    }
+    setIsSearchingCep(true);
+    try {
+      const response = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
+      const data = await response.json();
+      if (data.erro) {
+        showToast('error', 'CEP Não Encontrado', 'Verifique o número informado.');
+      } else {
+        setSettingsForm((prev) => ({
+          ...prev,
+          address: data.logradouro || prev.address,
+          neighborhood: data.bairro || prev.neighborhood,
+          city: data.localidade || prev.city,
+          state: data.uf || prev.state,
+          zipCode: cleanCep.replace(/(\d{5})(\d{3})/, '$1-$2'),
+        }));
+        showToast('success', 'Endereço Localizado!', `${data.localidade} - ${data.uf}`);
+      }
+    } catch {
+      showToast('error', 'Erro ao consultar CEP', 'Preencha os campos manualmente.');
+    } finally {
+      setIsSearchingCep(false);
+    }
+  };
 
   // Computed Financials
   const totalRevenue = orders
@@ -1121,23 +1178,33 @@ export function AdminDashboard() {
       {activeTab === 'quotes' && (
         <div className="space-y-6 animate-in fade-in">
           <div className="p-5 sm:p-6 rounded-3xl bg-slate-900/90 border border-blue-900/40 space-y-4">
-            <h3 className="font-bold text-sm text-white">Solicitações de Orçamentos</h3>
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+              <div>
+                <h3 className="font-bold text-base text-white">Solicitações de Orçamentos</h3>
+                <p className="text-xs text-slate-400">Propostas solicitadas pelos clientes na loja e WhatsApp.</p>
+              </div>
+              <span className="text-xs font-semibold px-3 py-1 rounded-full bg-blue-950 text-blue-300 border border-blue-800/40 self-start sm:self-auto">
+                Total: {quotes.length} orçamentos
+              </span>
+            </div>
+
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs text-slate-300">
                 <thead>
                   <tr className="border-b border-slate-800 text-slate-400 font-semibold">
                     <th className="pb-3">Número</th>
                     <th className="pb-3">Cliente</th>
+                    <th className="pb-3">Itens</th>
                     <th className="pb-3">Data</th>
                     <th className="pb-3">Status</th>
                     <th className="pb-3">Total Estimado</th>
-                    <th className="pb-3 text-right">Ação</th>
+                    <th className="pb-3 text-right">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
                   {quotes.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-12 text-center text-slate-400">
+                      <td colSpan={7} className="py-12 text-center text-slate-400">
                         <p className="font-bold text-sm text-slate-300">Nenhum orçamento solicitado ainda</p>
                         <p className="text-xs text-slate-500 mt-1">Quando os clientes solicitarem orçamentos pela loja ou WhatsApp, eles serão listados aqui.</p>
                       </td>
@@ -1151,10 +1218,15 @@ export function AdminDashboard() {
                       };
                       return (
                         <tr key={q.id} className="hover:bg-slate-850/50">
-                          <td className="py-3 font-bold text-white">{q.quoteNumber}</td>
+                          <td className="py-3 font-mono font-bold text-white">{q.quoteNumber}</td>
                           <td className="py-3">
                             <p className="font-semibold text-white">{q.customerName}</p>
-                            <p className="text-[11px] text-slate-400">{q.customerWhatsapp || q.customerPhone}</p>
+                            <p className="text-[11px] text-slate-400">{q.customerWhatsapp || q.customerPhone || q.customerEmail}</p>
+                          </td>
+                          <td className="py-3">
+                            <span className="text-xs text-slate-300">
+                              {q.items?.length || 0} produto(s) ({q.items?.reduce((s, i) => s + i.quantity, 0) || 0} un)
+                            </span>
                           </td>
                           <td className="py-3 text-slate-400">{formatDateBR(q.createdAt)}</td>
                           <td className="py-3">
@@ -1166,14 +1238,38 @@ export function AdminDashboard() {
                           </td>
                           <td className="py-3 font-black text-blue-300">{formatBRL(q.total)}</td>
                           <td className="py-3 text-right">
-                            {q.status !== 'convertido' && (
+                            <div className="flex items-center justify-end gap-1.5">
                               <button
-                                onClick={() => handleConvertQuote(q)}
-                                className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md transition-all"
+                                onClick={() => setSelectedQuote(q)}
+                                className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center gap-1 transition-all"
+                                title="Ver Detalhes do Orçamento"
                               >
-                                Converter em Pedido
+                                <Eye className="w-3.5 h-3.5" />
+                                <span>Ver</span>
                               </button>
-                            )}
+                              {q.status !== 'convertido' && (
+                                <button
+                                  onClick={() => handleConvertQuote(q)}
+                                  className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-md transition-all flex items-center gap-1"
+                                >
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                  <span>Converter</span>
+                                </button>
+                              )}
+                              <button
+                                onClick={() => {
+                                  if (confirm(`Excluir o orçamento ${q.quoteNumber}?`)) {
+                                    deleteQuote(q.id);
+                                    triggerRefresh();
+                                    showToast('info', 'Orçamento Removido', `Orçamento ${q.quoteNumber} excluído.`);
+                                  }
+                                }}
+                                className="p-1.5 rounded-lg text-rose-400 hover:text-rose-200 hover:bg-rose-950/40 transition-colors"
+                                title="Excluir Orçamento"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -1190,37 +1286,156 @@ export function AdminDashboard() {
       {activeTab === 'customers' && (
         <div className="space-y-6 animate-in fade-in">
           <div className="p-5 sm:p-6 rounded-3xl bg-slate-900/90 border border-blue-900/40 space-y-4">
-            <h3 className="font-bold text-sm text-white">Clientes Cadastrados</h3>
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+              <div>
+                <h3 className="font-bold text-base text-white">Gestão de Clientes</h3>
+                <p className="text-xs text-slate-400">Controle completo da base de clientes cadastrados no sistema.</p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const nextNum = customers.length + 101;
+                    setEditingCustomer({
+                      id: '',
+                      code: `CLI-${String(nextNum).padStart(6, '0')}`,
+                      name: '',
+                      cpfCnpj: '',
+                      phone: '',
+                      whatsapp: '',
+                      email: '',
+                      zipCode: '',
+                      address: '',
+                      number: '',
+                      complement: '',
+                      neighborhood: '',
+                      city: '',
+                      state: 'SP',
+                      notes: '',
+                      createdAt: new Date().toISOString(),
+                      totalSpent: 0,
+                      ordersCount: 0,
+                    });
+                    setIsCustomerModalOpen(true);
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition-all"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Novo Cliente</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Search Input */}
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Buscar por nome, telefone, e-mail, CPF/CNPJ ou cidade..."
+                value={customerSearch}
+                onChange={(e) => setCustomerSearch(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+
+            {/* Customers Table */}
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs text-slate-300">
                 <thead>
                   <tr className="border-b border-slate-800 text-slate-400 font-semibold">
-                    <th className="pb-3">Nome</th>
+                    <th className="pb-3">Código</th>
+                    <th className="pb-3">Nome / Documento</th>
                     <th className="pb-3">Contato</th>
-                    <th className="pb-3">Cidade / UF</th>
-                    <th className="pb-3">Cadastrado em</th>
+                    <th className="pb-3">Localização</th>
+                    <th className="pb-3">Pedidos / Gasto</th>
+                    <th className="pb-3">Cadastro</th>
+                    <th className="pb-3 text-right">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
                   {customers.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="py-12 text-center text-slate-400">
+                      <td colSpan={7} className="py-12 text-center text-slate-400">
                         <p className="font-bold text-sm text-slate-300">Nenhum cliente cadastrado no momento</p>
-                        <p className="text-xs text-slate-500 mt-1">Os clientes que se cadastrarem ou solicitarem pedidos na loja aparecerão aqui.</p>
+                        <p className="text-xs text-slate-500 mt-1">Clique em &quot;Novo Cliente&quot; ou aguarde cadastros pelo site.</p>
                       </td>
                     </tr>
                   ) : (
-                    customers.map((c) => (
-                      <tr key={c.id} className="hover:bg-slate-850/50">
-                        <td className="py-3 font-bold text-white">{c.name}</td>
-                        <td className="py-3">
-                          <p>{c.phone}</p>
-                          <p className="text-[11px] text-slate-400">{c.email}</p>
-                        </td>
-                        <td className="py-3">{c.city} / {c.state}</td>
-                        <td className="py-3 text-slate-400">{formatDateBR(c.createdAt)}</td>
-                      </tr>
-                    ))
+                    customers
+                      .filter((c) => {
+                        if (!customerSearch.trim()) return true;
+                        const s = customerSearch.toLowerCase();
+                        return (
+                          c.name.toLowerCase().includes(s) ||
+                          c.phone.toLowerCase().includes(s) ||
+                          c.email.toLowerCase().includes(s) ||
+                          (c.cpfCnpj && c.cpfCnpj.toLowerCase().includes(s)) ||
+                          (c.city && c.city.toLowerCase().includes(s)) ||
+                          (c.code && c.code.toLowerCase().includes(s))
+                        );
+                      })
+                      .map((c) => {
+                        const clientOrders = orders.filter(
+                          (o) => o.customerId === c.id || o.customerPhone === c.phone || (c.email && o.customerEmail === c.email)
+                        );
+                        const spent = clientOrders.reduce((sum, o) => (o.status !== 'cancelado' ? sum + o.total : sum), 0) || c.totalSpent;
+                        const totalOrdersCount = clientOrders.length || c.ordersCount;
+
+                        return (
+                          <tr key={c.id} className="hover:bg-slate-850/50">
+                            <td className="py-3 font-mono font-bold text-blue-400">{c.code || 'CLI-000'}</td>
+                            <td className="py-3">
+                              <p className="font-bold text-white">{c.name}</p>
+                              {c.cpfCnpj && <p className="text-[11px] text-slate-500 font-mono">Doc: {c.cpfCnpj}</p>}
+                            </td>
+                            <td className="py-3">
+                              <div className="flex items-center gap-1 text-slate-200">
+                                <Phone className="w-3 h-3 text-emerald-400" />
+                                <span>{c.phone}</span>
+                              </div>
+                              {c.email && <p className="text-[11px] text-slate-400 mt-0.5">{c.email}</p>}
+                            </td>
+                            <td className="py-3">
+                              {c.city ? (
+                                <p className="text-slate-300">{c.city} / {c.state || 'SP'}</p>
+                              ) : (
+                                <span className="text-slate-500">-</span>
+                              )}
+                              {c.neighborhood && <p className="text-[11px] text-slate-500">{c.neighborhood}</p>}
+                            </td>
+                            <td className="py-3">
+                              <p className="font-bold text-emerald-400">{formatBRL(spent)}</p>
+                              <p className="text-[11px] text-slate-400">{totalOrdersCount} pedido(s)</p>
+                            </td>
+                            <td className="py-3 text-slate-400">{formatDateBR(c.createdAt)}</td>
+                            <td className="py-3 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  onClick={() => setSelectedCustomer(c)}
+                                  className="px-2.5 py-1.5 rounded-xl bg-blue-900/40 hover:bg-blue-800/60 text-blue-200 font-bold text-xs border border-blue-700/40 transition-all flex items-center gap-1"
+                                  title="Ver Ficha Completa & Histórico"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                  <span>Ver / Editar</span>
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    if (confirm(`Deseja realmente excluir o cliente "${c.name}"?`)) {
+                                      deleteCustomer(c.id);
+                                      triggerRefresh();
+                                      showToast('info', 'Cliente Excluído', `Cliente ${c.name} foi removido.`);
+                                    }
+                                  }}
+                                  className="p-1.5 rounded-lg text-rose-400 hover:text-rose-200 hover:bg-rose-950/40 transition-colors"
+                                  title="Excluir Cliente"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
                   )}
                 </tbody>
               </table>
@@ -1249,7 +1464,6 @@ export function AdminDashboard() {
               }}
               className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md"
             >
-
               <Plus className="w-4 h-4" />
               <span>Novo Cupom</span>
             </button>
@@ -1295,19 +1509,19 @@ export function AdminDashboard() {
       {activeTab === 'settings' && (
         <form
           onSubmit={handleSaveSettings}
-          className="p-6 sm:p-8 rounded-3xl bg-slate-900/90 border border-blue-900/40 space-y-6 shadow-xl max-w-3xl animate-in fade-in"
+          className="p-6 sm:p-8 rounded-3xl bg-slate-900/90 border border-blue-900/40 space-y-6 shadow-xl max-w-4xl animate-in fade-in"
         >
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-blue-600/20 text-blue-400 flex items-center justify-center border border-blue-500/30">
               <Settings className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-white">Dados da Empresa & Logotipo</h2>
-              <p className="text-xs text-slate-400">Personalize o logotipo, CNPJ, WhatsApp e chave PIX do sistema.</p>
+              <h2 className="text-lg font-bold text-white">Dados Reais da Empresa & Configurações do Sistema</h2>
+              <p className="text-xs text-slate-400">Preencha os dados oficiais de sua empresa para exibição no rodapé, cabeçalho, orçamentos e recibos.</p>
             </div>
           </div>
 
-          {/* SEÇÃO DO LOGOTIPO DA EMPRESA */}
+          {/* SEÇÃO 1: LOGOTIPO OFICIAL DA EMPRESA */}
           <div className="p-5 rounded-2xl bg-slate-950 border border-blue-900/50 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -1339,7 +1553,7 @@ export function AdminDashboard() {
                         <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-700 flex items-center justify-center text-white font-black text-xs">
                           M2M
                         </div>
-                        <span className="text-xs font-bold text-white">M2MBrasil</span>
+                        <span className="text-xs font-bold text-white">{settingsForm.companyName || 'M2MBrasil'}</span>
                       </div>
                     )}
                   </div>
@@ -1359,7 +1573,7 @@ export function AdminDashboard() {
                         <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-white font-black text-xs">
                           M2M
                         </div>
-                        <span className="text-xs font-bold text-slate-900">M2MBrasil</span>
+                        <span className="text-xs font-bold text-slate-900">{settingsForm.companyName || 'M2MBrasil'}</span>
                       </div>
                     )}
                   </div>
@@ -1372,7 +1586,7 @@ export function AdminDashboard() {
                   <label className="block text-[11px] text-slate-300 font-semibold mb-1">
                     Enviar Arquivo do Logotipo (PNG, JPG, SVG):
                   </label>
-                  <label className="flex items-center justify-center gap-2 px-3 py-2 bg-blue-900/30 hover:bg-blue-900/50 border border-blue-700/60 hover:border-blue-500 rounded-xl cursor-pointer text-blue-200 text-xs font-bold transition-all">
+                  <label className="flex items-center justify-center gap-2 px-3 py-2.5 bg-blue-900/30 hover:bg-blue-900/50 border border-blue-700/60 hover:border-blue-500 rounded-xl cursor-pointer text-blue-200 text-xs font-bold transition-all shadow-md">
                     <Upload className="w-4 h-4 text-blue-400" />
                     <span>Selecionar Imagem do Computador</span>
                     <input
@@ -1427,87 +1641,315 @@ export function AdminDashboard() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-            <div className="space-y-1">
-              <label className="text-slate-300 font-semibold">Nome Fantasia</label>
-              <input
-                type="text"
-                value={settingsForm.companyName}
-                onChange={(e) => setSettingsForm({ ...settingsForm, companyName: e.target.value })}
-                className="w-full px-3 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:ring-1 focus:ring-blue-500 focus:outline-none"
-              />
+          {/* SEÇÃO 2: IDENTIFICAÇÃO DA EMPRESA */}
+          <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-4">
+            <h3 className="font-bold text-sm text-blue-300 flex items-center gap-2">
+              <Package className="w-4 h-4" />
+              <span>Identificação Jurídica / Cadastral</span>
+            </h3>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+              <div className="space-y-1 sm:col-span-1">
+                <label className="text-slate-300 font-semibold">Nome Fantasia da Empresa *</label>
+                <input
+                  type="text"
+                  placeholder="Ex: M2MBrasil Produtos Personalizados"
+                  value={settingsForm.companyName}
+                  onChange={(e) => setSettingsForm({ ...settingsForm, companyName: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1 sm:col-span-1">
+                <label className="text-slate-300 font-semibold">Razão Social</label>
+                <input
+                  type="text"
+                  placeholder="Ex: M2M Brasil Confecções e Brindes Ltda"
+                  value={settingsForm.tradeName || ''}
+                  onChange={(e) => setSettingsForm({ ...settingsForm, tradeName: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-1 sm:col-span-1">
+                <label className="text-slate-300 font-semibold">CNPJ / CPF</label>
+                <input
+                  type="text"
+                  placeholder="00.000.000/0001-00"
+                  value={settingsForm.cnpj || ''}
+                  onChange={(e) => setSettingsForm({ ...settingsForm, cnpj: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:ring-1 focus:ring-blue-500 focus:outline-none font-mono"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* SEÇÃO 3: CONTATOS OFICIAIS & ATENDIMENTO */}
+          <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-4">
+            <h3 className="font-bold text-sm text-emerald-300 flex items-center gap-2">
+              <MessageCircle className="w-4 h-4" />
+              <span>Contatos & Canais de Atendimento</span>
+            </h3>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+              <div className="space-y-1">
+                <label className="text-slate-300 font-semibold">WhatsApp Oficial (com DDD) *</label>
+                <input
+                  type="text"
+                  placeholder="15996019227"
+                  value={settingsForm.whatsapp}
+                  onChange={(e) => setSettingsForm({ ...settingsForm, whatsapp: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:ring-1 focus:ring-blue-500 focus:outline-none font-mono"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-slate-300 font-semibold">Telefone Comercial / Fixo</label>
+                <input
+                  type="text"
+                  placeholder="(15) 99601-9227"
+                  value={settingsForm.phone || ''}
+                  onChange={(e) => setSettingsForm({ ...settingsForm, phone: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-slate-300 font-semibold">E-mail Comercial / Atendimento</label>
+                <input
+                  type="email"
+                  placeholder="contato@seusite.com.br"
+                  value={settingsForm.email || ''}
+                  onChange={(e) => setSettingsForm({ ...settingsForm, email: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-1 sm:col-span-3">
+                <label className="text-slate-300 font-semibold">Mensagem Padrão ao Abrir WhatsApp</label>
+                <input
+                  type="text"
+                  placeholder="Olá! Gostaria de fazer um orçamento de produtos personalizados..."
+                  value={settingsForm.whatsappDefaultMessage || ''}
+                  onChange={(e) => setSettingsForm({ ...settingsForm, whatsappDefaultMessage: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-slate-300 font-semibold">Instagram (@)</label>
+                <input
+                  type="text"
+                  placeholder="@m2mbrasil"
+                  value={settingsForm.instagram || ''}
+                  onChange={(e) => setSettingsForm({ ...settingsForm, instagram: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-1 sm:col-span-2">
+                <label className="text-slate-300 font-semibold">Facebook</label>
+                <input
+                  type="text"
+                  placeholder="facebook.com/m2mbrasil"
+                  value={settingsForm.facebook || ''}
+                  onChange={(e) => setSettingsForm({ ...settingsForm, facebook: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* SEÇÃO 4: ENDEREÇO DA SEDE / LOJA */}
+          <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-sm text-blue-300 flex items-center gap-2">
+                <MapPin className="w-4 h-4" />
+                <span>Endereço da Empresa</span>
+              </h3>
+              <span className="text-[11px] text-slate-400">Preencha se desejar exibir endereço no rodapé</span>
             </div>
 
-            <div className="space-y-1">
-              <label className="text-slate-300 font-semibold">Razão Social</label>
-              <input
-                type="text"
-                value={settingsForm.tradeName}
-                onChange={(e) => setSettingsForm({ ...settingsForm, tradeName: e.target.value })}
-                className="w-full px-3 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:ring-1 focus:ring-blue-500 focus:outline-none"
-              />
-            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+              <div className="space-y-1 sm:col-span-1">
+                <label className="text-slate-300 font-semibold">CEP</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="18000-000"
+                    value={settingsForm.zipCode || ''}
+                    onChange={(e) => setSettingsForm({ ...settingsForm, zipCode: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white font-mono focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleSearchCep(settingsForm.zipCode || '')}
+                    disabled={isSearchingCep}
+                    className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shrink-0 transition-colors"
+                    title="Buscar endereço pelo CEP"
+                  >
+                    {isSearchingCep ? '...' : 'Buscar'}
+                  </button>
+                </div>
+              </div>
 
-            <div className="space-y-1">
-              <label className="text-slate-300 font-semibold">CNPJ</label>
-              <input
-                type="text"
-                value={settingsForm.cnpj}
-                onChange={(e) => setSettingsForm({ ...settingsForm, cnpj: e.target.value })}
-                className="w-full px-3 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:ring-1 focus:ring-blue-500 focus:outline-none"
-              />
-            </div>
+              <div className="space-y-1 sm:col-span-2">
+                <label className="text-slate-300 font-semibold">Rua / Logradouro</label>
+                <input
+                  type="text"
+                  placeholder="Nome da rua ou avenida"
+                  value={settingsForm.address || ''}
+                  onChange={(e) => setSettingsForm({ ...settingsForm, address: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                />
+              </div>
 
-            <div className="space-y-1">
-              <label className="text-slate-300 font-semibold">WhatsApp de Atendimento</label>
-              <input
-                type="text"
-                value={settingsForm.whatsapp}
-                onChange={(e) => setSettingsForm({ ...settingsForm, whatsapp: e.target.value })}
-                className="w-full px-3 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:ring-1 focus:ring-blue-500 focus:outline-none"
-              />
-            </div>
+              <div className="space-y-1 sm:col-span-1">
+                <label className="text-slate-300 font-semibold">Número</label>
+                <input
+                  type="text"
+                  placeholder="123"
+                  value={settingsForm.number || ''}
+                  onChange={(e) => setSettingsForm({ ...settingsForm, number: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                />
+              </div>
 
-            <div className="space-y-1">
-              <label className="text-slate-300 font-semibold">Chave PIX</label>
-              <input
-                type="text"
-                value={settingsForm.pixKey || ''}
-                onChange={(e) => setSettingsForm({ ...settingsForm, pixKey: e.target.value })}
-                className="w-full px-3 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:ring-1 focus:ring-blue-500 focus:outline-none"
-              />
-            </div>
+              <div className="space-y-1 sm:col-span-2">
+                <label className="text-slate-300 font-semibold">Bairro</label>
+                <input
+                  type="text"
+                  placeholder="Bairro"
+                  value={settingsForm.neighborhood || ''}
+                  onChange={(e) => setSettingsForm({ ...settingsForm, neighborhood: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                />
+              </div>
 
-            <div className="space-y-1">
-              <label className="text-slate-300 font-semibold">Favorecido PIX</label>
-              <input
-                type="text"
-                value={settingsForm.pixReceiverName || ''}
-                onChange={(e) => setSettingsForm({ ...settingsForm, pixReceiverName: e.target.value })}
-                className="w-full px-3 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:ring-1 focus:ring-blue-500 focus:outline-none"
-              />
-            </div>
+              <div className="space-y-1 sm:col-span-1">
+                <label className="text-slate-300 font-semibold">Cidade</label>
+                <input
+                  type="text"
+                  placeholder="Cidade"
+                  value={settingsForm.city || ''}
+                  onChange={(e) => setSettingsForm({ ...settingsForm, city: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                />
+              </div>
 
-            <div className="space-y-1">
-              <label className="text-slate-300 font-semibold">Frete Grátis a partir de (R$)</label>
-              <input
-                type="number"
-                value={settingsForm.freeShippingMinimum || 250}
-                onChange={(e) =>
-                  setSettingsForm({ ...settingsForm, freeShippingMinimum: parseFloat(e.target.value) || 0 })
-                }
-                className="w-full px-3 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:ring-1 focus:ring-blue-500 focus:outline-none"
-              />
+              <div className="space-y-1 sm:col-span-1">
+                <label className="text-slate-300 font-semibold">Estado (UF)</label>
+                <input
+                  type="text"
+                  placeholder="SP"
+                  maxLength={2}
+                  value={settingsForm.state || ''}
+                  onChange={(e) => setSettingsForm({ ...settingsForm, state: e.target.value.toUpperCase() })}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white uppercase focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* SEÇÃO 5: CONFIGURAÇÕES PIX & FRETE */}
+          <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-4">
+            <h3 className="font-bold text-sm text-teal-300 flex items-center gap-2">
+              <DollarSign className="w-4 h-4" />
+              <span>Recebimento PIX & Regras de Frete</span>
+            </h3>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+              <div className="space-y-1">
+                <label className="text-slate-300 font-semibold">Tipo de Chave PIX</label>
+                <select
+                  value={settingsForm.pixKeyType || 'celular'}
+                  onChange={(e) => setSettingsForm({ ...settingsForm, pixKeyType: e.target.value as any })}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                >
+                  <option value="celular">Celular / Telefone</option>
+                  <option value="cnpj">CNPJ</option>
+                  <option value="cpf">CPF</option>
+                  <option value="email">E-mail</option>
+                  <option value="aleatoria">Chave Aleatória (EVP)</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-slate-300 font-semibold">Chave PIX</label>
+                <input
+                  type="text"
+                  placeholder="15996019227"
+                  value={settingsForm.pixKey || ''}
+                  onChange={(e) => setSettingsForm({ ...settingsForm, pixKey: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white font-mono focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-slate-300 font-semibold">Nome do Titular / Favorecido PIX</label>
+                <input
+                  type="text"
+                  placeholder="Maurício Mastorillo"
+                  value={settingsForm.pixReceiverName || ''}
+                  onChange={(e) => setSettingsForm({ ...settingsForm, pixReceiverName: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-slate-300 font-semibold">Cidade da Conta PIX</label>
+                <input
+                  type="text"
+                  placeholder="Sorocaba"
+                  value={settingsForm.pixCity || ''}
+                  onChange={(e) => setSettingsForm({ ...settingsForm, pixCity: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-slate-300 font-semibold">Frete Grátis a partir de (R$)</label>
+                <input
+                  type="number"
+                  step="1"
+                  value={settingsForm.minOrderValueForFreeShipping || 250}
+                  onChange={(e) =>
+                    setSettingsForm({
+                      ...settingsForm,
+                      minOrderValueForFreeShipping: parseFloat(e.target.value) || 0,
+                    })
+                  }
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-slate-300 font-semibold">Valor Padrão do Frete (R$)</label>
+                <input
+                  type="number"
+                  step="0.50"
+                  value={settingsForm.deliveryFeeDefault || 18}
+                  onChange={(e) =>
+                    setSettingsForm({
+                      ...settingsForm,
+                      deliveryFeeDefault: parseFloat(e.target.value) || 0,
+                    })
+                  }
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                />
+              </div>
             </div>
           </div>
 
           <div className="flex justify-end pt-4 border-t border-slate-800">
             <button
               type="submit"
-              className="px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center gap-2 shadow-lg shadow-blue-900/40"
+              className="px-8 py-3.5 rounded-2xl bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-sm flex items-center gap-2 shadow-xl shadow-blue-900/50 border border-blue-400/30 transition-all hover:scale-[1.01]"
             >
-              <Save className="w-4 h-4" />
-              <span>Salvar Configurações</span>
+              <Save className="w-5 h-5" />
+              <span>Salvar Dados Reais da Empresa</span>
             </button>
           </div>
         </form>
@@ -1573,26 +2015,43 @@ export function AdminDashboard() {
       {isProductModalOpen && editingProduct && (
         <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
           <div className="relative w-full max-w-2xl bg-slate-900 border border-blue-800/40 rounded-3xl p-6 space-y-4 text-xs text-white max-h-[90vh] overflow-y-auto shadow-2xl">
-            <h3 className="text-base font-bold">
-              {editingProduct.id ? 'Editar Produto' : 'Cadastrar Novo Produto'}
-            </h3>
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Package className="w-5 h-5 text-blue-400" />
+                <span>{editingProduct.id ? 'Editar Produto' : 'Cadastrar Novo Produto'}</span>
+              </h3>
+              <button
+                onClick={() => setIsProductModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="text-slate-300 font-semibold">Código SKU</label>
                 <input
                   type="text"
+                  placeholder="PRD-001"
                   value={editingProduct.code}
                   onChange={(e) => setEditingProduct({ ...editingProduct, code: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl"
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl font-mono text-white"
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-slate-300 font-semibold">Categoria</label>
+                <label className="text-slate-300 font-semibold">Categoria *</label>
                 <select
                   value={editingProduct.categoryId}
-                  onChange={(e) => setEditingProduct({ ...editingProduct, categoryId: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl"
+                  onChange={(e) => {
+                    const cat = categories.find((c) => c.id === e.target.value);
+                    setEditingProduct({
+                      ...editingProduct,
+                      categoryId: e.target.value,
+                      categoryName: cat?.name || 'Geral',
+                    });
+                  }}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white"
                 >
                   {categories.map((c) => (
                     <option key={c.id} value={c.id}>
@@ -1604,31 +2063,34 @@ export function AdminDashboard() {
             </div>
 
             <div className="space-y-1">
-              <label className="text-slate-300 font-semibold">Nome do Produto</label>
+              <label className="text-slate-300 font-semibold">Nome do Produto *</label>
               <input
                 type="text"
+                placeholder="Ex: Camiseta Dry Fit UV50+ Personalizada"
                 value={editingProduct.name}
                 onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl"
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white"
+                required
               />
             </div>
 
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1">
-                <label className="text-slate-300 font-semibold">Preço de Venda (R$)</label>
+                <label className="text-slate-300 font-semibold">Preço de Venda (R$) *</label>
                 <input
                   type="number"
                   step="0.01"
                   value={editingProduct.price}
                   onChange={(e) => setEditingProduct({ ...editingProduct, price: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl"
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white font-semibold text-emerald-400"
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-slate-300 font-semibold">Preço Promo (Opcional)</label>
+                <label className="text-slate-300 font-semibold">Preço Promocional (R$)</label>
                 <input
                   type="number"
                   step="0.01"
+                  placeholder="Opcional"
                   value={editingProduct.promotionalPrice || ''}
                   onChange={(e) =>
                     setEditingProduct({
@@ -1636,7 +2098,7 @@ export function AdminDashboard() {
                       promotionalPrice: e.target.value ? parseFloat(e.target.value) : undefined,
                     })
                   }
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl"
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white"
                 />
               </div>
               <div className="space-y-1">
@@ -1645,41 +2107,152 @@ export function AdminDashboard() {
                   type="number"
                   value={editingProduct.stock}
                   onChange={(e) => setEditingProduct({ ...editingProduct, stock: parseInt(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl"
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white"
                 />
               </div>
             </div>
 
-            <div className="space-y-1">
-              <label className="text-slate-300 font-semibold">URL da Foto Principal</label>
-              <input
-                type="text"
-                value={editingProduct.images?.[0]?.url || ''}
-                onChange={(e) =>
-                  setEditingProduct({
-                    ...editingProduct,
-                    images: [
-                      {
-                        id: 'img-1',
-                        productId: editingProduct.id,
-                        url: e.target.value,
-                        isPrimary: true,
-                        order: 1,
-                      },
-                    ],
-                  })
-                }
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl"
-              />
+            {/* Imagem do Produto */}
+            <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 space-y-2.5">
+              <label className="text-slate-300 font-semibold block">Foto Principal do Produto</label>
+              <div className="flex gap-3 items-center">
+                <div className="w-16 h-16 rounded-xl bg-slate-900 border border-slate-800 overflow-hidden shrink-0 flex items-center justify-center">
+                  {editingProduct.images?.[0]?.url ? (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img
+                      src={editingProduct.images[0].url}
+                      alt="Preview"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <ImageIcon className="w-6 h-6 text-slate-600" />
+                  )}
+                </div>
+
+                <div className="flex-1 space-y-1.5">
+                  <label className="flex items-center justify-center gap-2 px-3 py-1.5 bg-blue-900/30 hover:bg-blue-900/50 border border-blue-700/60 rounded-xl cursor-pointer text-blue-200 text-xs font-bold transition-all">
+                    <Upload className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Carregar Foto do Computador</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = (event) => {
+                          const base64 = event.target?.result as string;
+                          setEditingProduct({
+                            ...editingProduct,
+                            images: [
+                              {
+                                id: `img-${Date.now()}`,
+                                productId: editingProduct.id,
+                                url: base64,
+                                isPrimary: true,
+                                order: 1,
+                              },
+                            ],
+                          });
+                        };
+                        reader.readAsDataURL(file);
+                      }}
+                    />
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ou digite a URL da imagem (https://...)"
+                    value={editingProduct.images?.[0]?.url || ''}
+                    onChange={(e) =>
+                      setEditingProduct({
+                        ...editingProduct,
+                        images: [
+                          {
+                            id: 'img-1',
+                            productId: editingProduct.id,
+                            url: e.target.value,
+                            isPrimary: true,
+                            order: 1,
+                          },
+                        ],
+                      })
+                    }
+                    className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-white"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Cores Disponíveis */}
+            <div className="space-y-1.5">
+              <label className="text-slate-300 font-semibold block">Cores Disponíveis para este Produto</label>
+              <div className="flex flex-wrap gap-2 p-2.5 rounded-xl bg-slate-950 border border-slate-800">
+                {colors.map((c) => {
+                  const isSelected = editingProduct.availableColors?.some((ac) => ac.id === c.id || ac.name === c.name);
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => {
+                        const current = editingProduct.availableColors || [];
+                        const updated = isSelected
+                          ? current.filter((ac) => ac.id !== c.id && ac.name !== c.name)
+                          : [...current, c];
+                        setEditingProduct({ ...editingProduct, availableColors: updated });
+                      }}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs border transition-all ${
+                        isSelected
+                          ? 'bg-blue-600/30 border-blue-500 text-white font-bold'
+                          : 'bg-slate-900 border-slate-800 text-slate-400 opacity-60'
+                      }`}
+                    >
+                      <span className="w-3.5 h-3.5 rounded-full border border-slate-700" style={{ backgroundColor: c.hex }} />
+                      <span>{c.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Tamanhos Disponíveis */}
+            <div className="space-y-1.5">
+              <label className="text-slate-300 font-semibold block">Grade de Tamanhos</label>
+              <div className="flex flex-wrap gap-2 p-2.5 rounded-xl bg-slate-950 border border-slate-800">
+                {sizes.map((s) => {
+                  const isSelected = editingProduct.availableSizes?.some((as) => as.id === s.id || as.name === s.name);
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => {
+                        const current = editingProduct.availableSizes || [];
+                        const updated = isSelected
+                          ? current.filter((as) => as.id !== s.id && as.name !== s.name)
+                          : [...current, s];
+                        setEditingProduct({ ...editingProduct, availableSizes: updated });
+                      }}
+                      className={`px-3 py-1 rounded-lg text-xs border transition-all ${
+                        isSelected
+                          ? 'bg-blue-600/30 border-blue-500 text-white font-bold'
+                          : 'bg-slate-900 border-slate-800 text-slate-400 opacity-60'
+                      }`}
+                    >
+                      {s.name}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             <div className="space-y-1">
-              <label className="text-slate-300 font-semibold">Descrição</label>
+              <label className="text-slate-300 font-semibold">Descrição do Produto</label>
               <textarea
+                placeholder="Detalhes sobre o tecido, acabamento, personalização..."
                 value={editingProduct.description}
                 onChange={(e) => setEditingProduct({ ...editingProduct, description: e.target.value })}
-                rows={2}
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl"
+                rows={3}
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white"
               />
             </div>
 
@@ -1708,18 +2281,22 @@ export function AdminDashboard() {
             <div className="flex justify-end gap-2 pt-4 border-t border-slate-800">
               <button
                 onClick={() => setIsProductModalOpen(false)}
-                className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300"
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300"
               >
                 Cancelar
               </button>
               <button
                 onClick={() => {
+                  if (!editingProduct.name.trim()) {
+                    showToast('error', 'Nome Obrigatório', 'Por favor, informe o nome do produto.');
+                    return;
+                  }
                   saveProduct(editingProduct);
                   setIsProductModalOpen(false);
                   triggerRefresh();
-                  showToast('success', 'Produto Salvo!', editingProduct.name);
+                  showToast('success', 'Produto Salvo com Sucesso!', editingProduct.name);
                 }}
-                className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold"
+                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold shadow-lg shadow-blue-900/40"
               >
                 Salvar Produto
               </button>
@@ -1728,15 +2305,395 @@ export function AdminDashboard() {
         </div>
       )}
 
+      {/* Customer View & Edit Modal */}
+      {selectedCustomer && (
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+          <div className="relative w-full max-w-2xl bg-slate-900 border border-blue-800/40 rounded-3xl p-6 space-y-5 text-xs text-white max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <Users className="w-5 h-5 text-blue-400" />
+                <h3 className="text-base font-bold text-white">Ficha do Cliente: {selectedCustomer.name}</h3>
+                <span className="font-mono text-[11px] text-blue-300 bg-blue-950 px-2 py-0.5 rounded border border-blue-800/40">
+                  {selectedCustomer.code}
+                </span>
+              </div>
+              <button
+                onClick={() => setSelectedCustomer(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-slate-300 font-semibold">Nome Completo *</label>
+                <input
+                  type="text"
+                  value={selectedCustomer.name}
+                  onChange={(e) => setSelectedCustomer({ ...selectedCustomer, name: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-slate-300 font-semibold">CPF / CNPJ</label>
+                <input
+                  type="text"
+                  value={selectedCustomer.cpfCnpj || ''}
+                  onChange={(e) => setSelectedCustomer({ ...selectedCustomer, cpfCnpj: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white font-mono"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-slate-300 font-semibold">Telefone / WhatsApp *</label>
+                <input
+                  type="text"
+                  value={selectedCustomer.phone}
+                  onChange={(e) => setSelectedCustomer({ ...selectedCustomer, phone: e.target.value, whatsapp: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white font-mono"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-slate-300 font-semibold">E-mail</label>
+                <input
+                  type="email"
+                  value={selectedCustomer.email || ''}
+                  onChange={(e) => setSelectedCustomer({ ...selectedCustomer, email: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white"
+                />
+              </div>
+
+              <div className="space-y-1 sm:col-span-2">
+                <label className="text-slate-300 font-semibold">Endereço de Entrega</label>
+                <input
+                  type="text"
+                  placeholder="Rua, Número, Bairro, Complemento"
+                  value={selectedCustomer.address || ''}
+                  onChange={(e) => setSelectedCustomer({ ...selectedCustomer, address: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-slate-300 font-semibold">Cidade</label>
+                <input
+                  type="text"
+                  value={selectedCustomer.city || ''}
+                  onChange={(e) => setSelectedCustomer({ ...selectedCustomer, city: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-slate-300 font-semibold">Estado (UF)</label>
+                <input
+                  type="text"
+                  maxLength={2}
+                  value={selectedCustomer.state || 'SP'}
+                  onChange={(e) => setSelectedCustomer({ ...selectedCustomer, state: e.target.value.toUpperCase() })}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white uppercase"
+                />
+              </div>
+
+              <div className="space-y-1 sm:col-span-2">
+                <label className="text-slate-300 font-semibold">Observações Internas</label>
+                <textarea
+                  rows={2}
+                  placeholder="Anotações sobre preferências do cliente, prazos especiais..."
+                  value={selectedCustomer.notes || ''}
+                  onChange={(e) => setSelectedCustomer({ ...selectedCustomer, notes: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white"
+                />
+              </div>
+            </div>
+
+            {/* Pedidos do Cliente */}
+            <div className="pt-2 border-t border-slate-800 space-y-2">
+              <h4 className="font-bold text-xs text-blue-300">Histórico de Pedidos deste Cliente</h4>
+              {orders.filter((o) => o.customerId === selectedCustomer.id || o.customerPhone === selectedCustomer.phone).length === 0 ? (
+                <p className="text-xs text-slate-500 italic">Nenhum pedido realizado ainda.</p>
+              ) : (
+                <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                  {orders
+                    .filter((o) => o.customerId === selectedCustomer.id || o.customerPhone === selectedCustomer.phone)
+                    .map((ord) => (
+                      <div
+                        key={ord.id}
+                        className="flex items-center justify-between p-2 rounded-xl bg-slate-950 border border-slate-800 text-xs"
+                      >
+                        <div>
+                          <span className="font-mono font-bold text-white">{ord.orderNumber}</span>
+                          <span className="text-slate-400 ml-2">({formatDateBR(ord.createdAt)})</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="font-black text-emerald-400">{formatBRL(ord.total)}</span>
+                          <button
+                            onClick={() => {
+                              setSelectedCustomer(null);
+                              setOrderToPrint(ord);
+                            }}
+                            className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-200"
+                          >
+                            Imprimir
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4 border-t border-slate-800">
+              <button
+                onClick={() => setSelectedCustomer(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300"
+              >
+                Fechar
+              </button>
+              <button
+                onClick={() => {
+                  if (!selectedCustomer.name.trim()) {
+                    showToast('error', 'Nome Obrigatório', 'Informe o nome do cliente.');
+                    return;
+                  }
+                  saveCustomer(selectedCustomer);
+                  setSelectedCustomer(null);
+                  triggerRefresh();
+                  showToast('success', 'Cliente Atualizado!', selectedCustomer.name);
+                }}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold shadow-md"
+              >
+                Salvar Alterações
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Customer Create Modal */}
+      {isCustomerModalOpen && editingCustomer && (
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+          <div className="relative w-full max-w-2xl bg-slate-900 border border-blue-800/40 rounded-3xl p-6 space-y-4 text-xs text-white max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Users className="w-5 h-5 text-blue-400" />
+                <span>Cadastrar Novo Cliente</span>
+              </h3>
+              <button
+                onClick={() => setIsCustomerModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-slate-300 font-semibold">Nome Completo *</label>
+                <input
+                  type="text"
+                  placeholder="Nome do cliente ou razão social"
+                  value={editingCustomer.name}
+                  onChange={(e) => setEditingCustomer({ ...editingCustomer, name: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-slate-300 font-semibold">CPF / CNPJ</label>
+                <input
+                  type="text"
+                  placeholder="000.000.000-00"
+                  value={editingCustomer.cpfCnpj || ''}
+                  onChange={(e) => setEditingCustomer({ ...editingCustomer, cpfCnpj: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white font-mono"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-slate-300 font-semibold">Telefone / WhatsApp *</label>
+                <input
+                  type="text"
+                  placeholder="(15) 99999-9999"
+                  value={editingCustomer.phone}
+                  onChange={(e) => setEditingCustomer({ ...editingCustomer, phone: e.target.value, whatsapp: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white font-mono"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-slate-300 font-semibold">E-mail</label>
+                <input
+                  type="email"
+                  placeholder="cliente@email.com"
+                  value={editingCustomer.email || ''}
+                  onChange={(e) => setEditingCustomer({ ...editingCustomer, email: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white"
+                />
+              </div>
+
+              <div className="space-y-1 sm:col-span-2">
+                <label className="text-slate-300 font-semibold">Endereço de Entrega</label>
+                <input
+                  type="text"
+                  placeholder="Rua, Número, Bairro, Complemento"
+                  value={editingCustomer.address || ''}
+                  onChange={(e) => setEditingCustomer({ ...editingCustomer, address: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-slate-300 font-semibold">Cidade</label>
+                <input
+                  type="text"
+                  placeholder="Cidade"
+                  value={editingCustomer.city || ''}
+                  onChange={(e) => setEditingCustomer({ ...editingCustomer, city: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-slate-300 font-semibold">Estado (UF)</label>
+                <input
+                  type="text"
+                  placeholder="SP"
+                  maxLength={2}
+                  value={editingCustomer.state || 'SP'}
+                  onChange={(e) => setEditingCustomer({ ...editingCustomer, state: e.target.value.toUpperCase() })}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white uppercase"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4 border-t border-slate-800">
+              <button
+                onClick={() => setIsCustomerModalOpen(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  if (!editingCustomer.name.trim() || !editingCustomer.phone.trim()) {
+                    showToast('error', 'Campos Obrigatórios', 'Informe ao menos o nome e o telefone do cliente.');
+                    return;
+                  }
+                  saveCustomer(editingCustomer);
+                  setIsCustomerModalOpen(false);
+                  triggerRefresh();
+                  showToast('success', 'Cliente Cadastrado com Sucesso!', editingCustomer.name);
+                }}
+                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold shadow-lg shadow-blue-900/40"
+              >
+                Cadastrar Cliente
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quote Detail Modal */}
+      {selectedQuote && (
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+          <div className="relative w-full max-w-xl bg-slate-900 border border-blue-800/40 rounded-3xl p-6 space-y-4 text-xs text-white max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div>
+                <h3 className="text-base font-bold text-white">Orçamento {selectedQuote.quoteNumber}</h3>
+                <p className="text-xs text-slate-400">Solicitado em {formatDateBR(selectedQuote.createdAt)}</p>
+              </div>
+              <button
+                onClick={() => setSelectedQuote(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 space-y-1.5">
+              <p className="font-bold text-white text-sm">{selectedQuote.customerName}</p>
+              <p className="text-slate-300">WhatsApp / Telefone: {selectedQuote.customerWhatsapp || selectedQuote.customerPhone || '-'}</p>
+              <p className="text-slate-300">E-mail: {selectedQuote.customerEmail || '-'}</p>
+              {selectedQuote.customerCompany && <p className="text-slate-400">Empresa: {selectedQuote.customerCompany}</p>}
+            </div>
+
+            {/* Items */}
+            <div className="space-y-2">
+              <h4 className="font-bold text-xs text-blue-300">Itens do Orçamento:</h4>
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {selectedQuote.items?.map((item, idx) => (
+                  <div
+                    key={idx}
+                    className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-3"
+                  >
+                    <div>
+                      <p className="font-bold text-white">{item.productName}</p>
+                      <p className="text-[11px] text-slate-400">
+                        {item.quantity} un • Cor: {item.colorName || '-'} • Tam: {item.sizeName || '-'}
+                      </p>
+                      {item.customizationNotes && (
+                        <p className="text-[11px] text-blue-300 italic mt-0.5">Arte: {item.customizationNotes}</p>
+                      )}
+                    </div>
+                    <span className="font-black text-blue-300">{formatBRL(item.subtotal || (item.unitPrice * item.quantity))}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {selectedQuote.notes && (
+              <div className="p-3 rounded-xl bg-blue-950/40 border border-blue-800/40 text-blue-200 text-xs">
+                <strong>Observações do Cliente:</strong> {selectedQuote.notes}
+              </div>
+            )}
+
+            <div className="flex justify-between items-center pt-3 border-t border-slate-800">
+              <div>
+                <span className="text-slate-400 text-xs">Total Estimado:</span>
+                <p className="text-lg font-black text-emerald-400">{formatBRL(selectedQuote.total)}</p>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setSelectedQuote(null)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700"
+                >
+                  Fechar
+                </button>
+                {selectedQuote.status !== 'convertido' && (
+                  <button
+                    onClick={() => {
+                      handleConvertQuote(selectedQuote);
+                      setSelectedQuote(null);
+                    }}
+                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold shadow-md flex items-center gap-1.5"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Converter em Pedido</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Category Modal */}
       {isCategoryModalOpen && editingCategory && (
         <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="relative w-full max-w-md bg-slate-900 border border-blue-800/40 rounded-3xl p-6 space-y-4 text-xs text-white">
-            <h3 className="text-base font-bold">Categoria</h3>
+          <div className="relative w-full max-w-md bg-slate-900 border border-blue-800/40 rounded-3xl p-6 space-y-4 text-xs text-white shadow-2xl">
+            <h3 className="text-base font-bold text-white">Categoria</h3>
             <div className="space-y-1">
-              <label className="text-slate-300 font-semibold">Nome</label>
+              <label className="text-slate-300 font-semibold">Nome da Categoria</label>
               <input
                 type="text"
+                placeholder="Ex: Canecas Personalizadas"
                 value={editingCategory.name}
                 onChange={(e) =>
                   setEditingCategory({
@@ -1745,7 +2702,7 @@ export function AdminDashboard() {
                     slug: e.target.value.toLowerCase().replace(/\s+/g, '-'),
                   })
                 }
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl"
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white"
               />
             </div>
             <div className="flex justify-end gap-2 pt-2">
@@ -1764,7 +2721,7 @@ export function AdminDashboard() {
                 }}
                 className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold"
               >
-                Salvar
+                Salvar Categoria
               </button>
             </div>
           </div>
@@ -1774,15 +2731,15 @@ export function AdminDashboard() {
       {/* Coupon Modal */}
       {isCouponModalOpen && editingCoupon && (
         <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="relative w-full max-w-md bg-slate-900 border border-blue-800/40 rounded-3xl p-6 space-y-4 text-xs text-white">
-            <h3 className="text-base font-bold">Cupom de Desconto</h3>
+          <div className="relative w-full max-w-md bg-slate-900 border border-blue-800/40 rounded-3xl p-6 space-y-4 text-xs text-white shadow-2xl">
+            <h3 className="text-base font-bold text-white">Cupom de Desconto</h3>
             <div className="space-y-1">
               <label className="text-slate-300 font-semibold">Código do Cupom</label>
               <input
                 type="text"
                 value={editingCoupon.code}
                 onChange={(e) => setEditingCoupon({ ...editingCoupon, code: e.target.value.toUpperCase() })}
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl font-mono"
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl font-mono text-white"
               />
             </div>
             <div className="grid grid-cols-2 gap-2">
@@ -1791,7 +2748,7 @@ export function AdminDashboard() {
                 <select
                   value={editingCoupon.discountType}
                   onChange={(e) => setEditingCoupon({ ...editingCoupon, discountType: e.target.value as any })}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl"
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white"
                 >
                   <option value="percentage">Porcentagem (%)</option>
                   <option value="fixed">Fixo (R$)</option>
@@ -1803,7 +2760,7 @@ export function AdminDashboard() {
                   type="number"
                   value={editingCoupon.discountValue}
                   onChange={(e) => setEditingCoupon({ ...editingCoupon, discountValue: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl"
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white"
                 />
               </div>
             </div>

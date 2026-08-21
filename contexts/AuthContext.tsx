@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { Customer, User, UserRole } from '@/lib/types';
-import { getCustomers, getUsers, saveCustomer, saveUser, addActivityLog } from '@/lib/storage';
+import { getCustomers, getUsers, saveCustomer, saveUser, addActivityLog, subscribeDb } from '@/lib/storage';
 
 interface AuthContextType {
   user: User | null;
@@ -90,6 +90,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.warn('Could not restore auth session', e);
     }
   }, []);
+
+  useEffect(() => {
+    return subscribeDb(loadCurrentSession);
+  }, [loadCurrentSession]);
 
 
   const login = async (identifier: string, password?: string) => {

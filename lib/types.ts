@@ -149,6 +149,7 @@ export interface OrderItem {
   unitPrice: number;
   subtotal: number;
   customization?: CustomizationDetails;
+  customizationNotes?: string;
 }
 
 export interface OrderTimelineEvent {
@@ -205,7 +206,9 @@ export interface QuoteItem {
   quantity: number;
   unitPrice: number;
   subtotal: number;
+  total?: number;
   customization?: CustomizationDetails;
+  customizationNotes?: string;
 }
 
 export interface Quote {
@@ -216,6 +219,7 @@ export interface Quote {
   customerPhone: string;
   customerWhatsapp: string;
   customerEmail: string;
+  customerCompany?: string;
   items: QuoteItem[];
   subtotal: number;
   discount: number;
@@ -255,7 +259,7 @@ export interface CompanySettings {
   freeShippingMinimum?: number;
   freeShippingEnabled: boolean;
 
-  pixKeyType?: 'cnpj' | 'email' | 'phone' | 'random';
+  pixKeyType?: 'cnpj' | 'cpf' | 'email' | 'phone' | 'celular' | 'random' | 'aleatoria' | string;
   pixKey?: string;
   pixReceiverName?: string;
   pixCity?: string;
