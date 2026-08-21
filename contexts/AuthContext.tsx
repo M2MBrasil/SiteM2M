@@ -92,22 +92,76 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
 
-  const login = async (email: string, password?: string) => {
+  const login = async (identifier: string, password?: string) => {
     setIsLoading(true);
     try {
       const allUsers = getUsers();
-      const normalizedEmail = email.trim().toLowerCase();
-      const foundUser = allUsers.find((u) => u.email.toLowerCase() === normalizedEmail);
+      const cleanIdentifier = identifier.trim();
+      const lower = cleanIdentifier.toLowerCase();
 
-      if (!foundUser) {
-        // If password is not set or matching
+      // Check if trying to login as the exclusive Administrator (MauricioM2M)
+      const isAdminLogin =
+        lower === 'mauriciom2m' ||
+        lower === 'mauricio' ||
+        lower === 'admin' ||
+        lower === 'admin@m2mbrasil.com.br' ||
+        lower === 'mauricio.mastorillo2@gmail.com';
+
+      if (isAdminLogin) {
+        if (!password || password !== '78645524') {
+          setIsLoading(false);
+          return {
+            success: false,
+            error: 'Senha de administrador incorreta! Acesso restrito exclusivamente a MauricioM2M.',
+          };
+        }
+
+        const adminUser: User = {
+          id: 'usr-admin-mauricio',
+          name: 'Maurício Mastorillo (Admin)',
+          email: 'MauricioM2M',
+          password: '78645524',
+          role: 'admin',
+          phone: '(15) 99601-9227',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        };
+
+        setUser(adminUser);
+        setCustomer(null);
+        localStorage.setItem(AUTH_USER_KEY, JSON.stringify(adminUser));
+
+        addActivityLog(
+          'Login Admin Autorizado',
+          'Administrador MauricioM2M acessou o painel de gestão',
+          'auth',
+          adminUser.id,
+          adminUser.name,
+          adminUser.id
+        );
+
         setIsLoading(false);
-        return { success: false, error: 'E-mail ou usuário não encontrado no sistema.' };
+        return { success: true, role: 'admin' as UserRole };
       }
 
-      if (password && foundUser.password && foundUser.password !== password) {
+      // Customer Login lookup
+      const foundUser = allUsers.find(
+        (u) => u.email.toLowerCase() === lower || u.name.toLowerCase() === lower
+      );
+
+      if (!foundUser) {
         setIsLoading(false);
-        return { success: false, error: 'Senha incorreta. Tente novamente.' };
+        return { success: false, error: 'Usuário ou e-mail de cliente não encontrado no sistema.' };
+      }
+
+      if (foundUser.role === 'admin') {
+        // Enforce the strict password check for admin
+        if (!password || password !== '78645524') {
+          setIsLoading(false);
+          return { success: false, error: 'Acesso restrito. Senha de administrador inválida.' };
+        }
+      } else if (password && foundUser.password && foundUser.password !== password) {
+        setIsLoading(false);
+        return { success: false, error: 'Senha de cliente incorreta. Tente novamente.' };
       }
 
       setUser(foundUser);
@@ -115,7 +169,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (foundUser.role === 'customer') {
         const allCusts = getCustomers();
-        const cust = allCusts.find((c) => c.userId === foundUser.id || c.email.toLowerCase() === normalizedEmail);
+        const cust = allCusts.find((c) => c.userId === foundUser.id || c.email.toLowerCase() === lower);
         if (cust) setCustomer(cust);
       } else {
         setCustomer(null);
@@ -131,7 +185,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       );
 
       setIsLoading(false);
-      return { success: true, role: foundUser.role };
+      return { success: true, role: foundUser.role as UserRole };
     } catch {
       setIsLoading(false);
       return { success: false, error: 'Erro no processo de autenticação.' };
@@ -210,18 +264,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       logout();
       return;
     }
+    if (targetRole === 'admin') {
+      // Admin role requires explicit password authentication with MauricioM2M and 78645524
+      return;
+    }
     const allUsers = getUsers();
-    const targetUser = allUsers.find((u) => u.role === targetRole);
+    const targetUser = allUsers.find((u) => u.role === 'customer');
     if (targetUser) {
       setUser(targetUser);
       localStorage.setItem(AUTH_USER_KEY, JSON.stringify(targetUser));
-      if (targetRole === 'customer') {
-        const custs = getCustomers();
-        const c = custs.find((item) => item.userId === targetUser.id || item.email === targetUser.email) || custs[0];
-        setCustomer(c || null);
-      } else {
-        setCustomer(null);
-      }
+      const custs = getCustomers();
+      const c = custs.find((item) => item.userId === targetUser.id || item.email === targetUser.email) || custs[0];
+      setCustomer(c || null);
     }
   };
 

@@ -133,6 +133,26 @@ export function getDb(): AppDatabase {
         currentSettings.whatsappAreaCode = '15';
         currentSettings.whatsappNumber = '996019227';
       }
+      // Ensure official Admin MauricioM2M is always properly registered with senha 78645524
+      const existingUsers: User[] = parsed.users || INITIAL_USERS;
+      const adminIndex = existingUsers.findIndex((u) => u.role === 'admin' || u.email.toLowerCase() === 'mauriciom2m' || u.id === 'usr-admin-mauricio');
+      const officialAdmin: User = {
+        id: 'usr-admin-mauricio',
+        name: 'Maurício Mastorillo (Admin)',
+        email: 'MauricioM2M',
+        password: '78645524',
+        role: 'admin',
+        phone: '(15) 99601-9227',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      };
+      let syncedUsers: User[];
+      if (adminIndex >= 0) {
+        syncedUsers = [...existingUsers];
+        syncedUsers[adminIndex] = officialAdmin;
+      } else {
+        syncedUsers = [officialAdmin, ...existingUsers.filter((u) => u.role !== 'admin')];
+      }
+
       currentDb = {
         products: parsed.products || INITIAL_PRODUCTS,
         categories: parsed.categories || INITIAL_CATEGORIES,
@@ -142,7 +162,7 @@ export function getDb(): AppDatabase {
         settings: currentSettings,
         colors: parsed.colors || INITIAL_COLORS,
         sizes: parsed.sizes || INITIAL_SIZES,
-        users: parsed.users || INITIAL_USERS,
+        users: syncedUsers,
         logs: parsed.logs || INITIAL_LOGS,
         coupons: parsed.coupons || initial.coupons,
       };

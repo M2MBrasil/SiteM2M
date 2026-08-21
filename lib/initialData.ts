@@ -639,12 +639,12 @@ export const INITIAL_PRODUCTS: Product[] = [
 
 export const INITIAL_USERS: User[] = [
   {
-    id: 'usr-admin-1',
+    id: 'usr-admin-mauricio',
     name: 'Maurício Mastorillo (Admin)',
-    email: 'admin@m2mbrasil.com.br',
-    password: 'admin123', // Demo pass
+    email: 'MauricioM2M',
+    password: '78645524',
     role: 'admin',
-    phone: '(11) 98765-4321',
+    phone: '(15) 99601-9227',
     createdAt: '2026-01-01T00:00:00.000Z',
   },
   {

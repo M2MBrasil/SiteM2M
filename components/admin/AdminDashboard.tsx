@@ -97,10 +97,18 @@ import {
   Size,
 } from '@/lib/types';
 import { useNotification } from '@/contexts/NotificationContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { PrintReceiptModal } from '@/components/common/PrintReceiptModal';
 
 export function AdminDashboard() {
   const { showToast } = useNotification();
+  const { user, isAdmin, login } = useAuth();
+
+  // Admin login form state for lock screen
+  const [adminUsername, setAdminUsername] = useState('MauricioM2M');
+  const [adminPassword, setAdminPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   const [activeTab, setActiveTab] = useState<
     | 'overview'
@@ -241,6 +249,104 @@ export function AdminDashboard() {
       showToast('info', 'Sistema Restaurado', 'Dados restaurados para o padrão de demonstração.');
     }
   };
+
+  const handleAdminDirectLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError('');
+    setIsLoggingIn(true);
+    try {
+      const success = await login(adminUsername, adminPassword);
+      if (success) {
+        showToast('success', 'Acesso Autorizado', 'Bem-vindo ao Painel de Controle, Maurício!');
+      } else {
+        setLoginError('Usuário ou senha de administrador incorretos. Apenas MauricioM2M tem acesso.');
+      }
+    } catch {
+      setLoginError('Falha na autenticação do administrador.');
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  if (!isAdmin) {
+    return (
+      <div className="max-w-xl mx-auto px-4 py-16">
+        <div className="rounded-3xl bg-gradient-to-b from-slate-900 via-blue-950/80 to-slate-950 border border-blue-800/60 p-8 shadow-2xl text-slate-100 relative overflow-hidden">
+          {/* Background decorative glow */}
+          <div className="absolute top-0 right-0 -mr-16 -mt-16 w-48 h-48 bg-blue-600/20 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute bottom-0 left-0 -ml-16 -mb-16 w-48 h-48 bg-indigo-600/20 rounded-full blur-3xl pointer-events-none" />
+
+          <div className="text-center relative z-10 space-y-4">
+            <div className="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 p-0.5 shadow-xl shadow-blue-900/40 flex items-center justify-center">
+              <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center">
+                <AlertCircle className="w-8 h-8 text-blue-400" />
+              </div>
+            </div>
+
+            <div>
+              <h2 className="text-2xl font-black text-white tracking-tight">
+                Acesso Restrito ao Administrador
+              </h2>
+              <p className="text-xs text-blue-200/80 mt-1 max-w-sm mx-auto">
+                Este painel de controle e todas as operações de CRUD (Produtos, Clientes, Pedidos, Estoque) são de acesso exclusivo do administrador <strong>MauricioM2M</strong>.
+              </p>
+            </div>
+
+            {user && (
+              <div className="p-3 rounded-xl bg-blue-950/50 border border-blue-800/40 text-xs text-blue-200">
+                Você está conectado como cliente (<strong>{user.name}</strong>). Clientes têm acesso apenas à visualização do catálogo e envio de orçamentos.
+              </div>
+            )}
+
+            <form onSubmit={handleAdminDirectLogin} className="space-y-4 text-left pt-2">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                  Usuário de Administrador
+                </label>
+                <input
+                  type="text"
+                  value={adminUsername}
+                  onChange={(e) => setAdminUsername(e.target.value)}
+                  placeholder="MauricioM2M"
+                  required
+                  className="w-full px-4 py-3 rounded-xl bg-slate-900/90 border border-blue-800/50 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                  Senha do Administrador
+                </label>
+                <input
+                  type="password"
+                  value={adminPassword}
+                  onChange={(e) => setAdminPassword(e.target.value)}
+                  placeholder="Digite sua senha de admin"
+                  required
+                  className="w-full px-4 py-3 rounded-xl bg-slate-900/90 border border-blue-800/50 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {loginError && (
+                <div className="p-3 rounded-xl bg-rose-950/50 border border-rose-800/60 text-xs text-rose-300">
+                  {loginError}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={isLoggingIn}
+                className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-sm shadow-lg shadow-blue-900/40 transition-all border border-blue-400/30 flex items-center justify-center gap-2"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>{isLoggingIn ? 'Autenticando...' : 'Entrar no Painel Administrativo'}</span>
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
