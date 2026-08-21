@@ -682,8 +682,8 @@ export function AdminDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
-                  {orders
-                    .filter((o) => {
+                  {(() => {
+                    const filtered = orders.filter((o) => {
                       if (orderStatusFilter !== 'all' && o.status !== orderStatusFilter) {
                         return false;
                       }
@@ -695,8 +695,20 @@ export function AdminDashboard() {
                         if (!matchNum && !matchName && !matchPhone) return false;
                       }
                       return true;
-                    })
-                    .map((ord) => {
+                    });
+
+                    if (filtered.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={7} className="py-12 text-center text-slate-400">
+                            <p className="font-bold text-sm text-slate-300">Nenhum pedido registrado no momento</p>
+                            <p className="text-xs text-slate-500 mt-1">Os novos pedidos realizados pelos clientes ou convertidos de orçamentos aparecerão aqui.</p>
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    return filtered.map((ord) => {
                       const statusMeta = ORDER_STATUS_MAP[ord.status] || {
                         label: ord.status,
                         bg: 'bg-slate-800',
@@ -766,7 +778,8 @@ export function AdminDashboard() {
                           </td>
                         </tr>
                       );
-                    })}
+                    });
+                  })()}
                 </tbody>
               </table>
             </div>
@@ -862,8 +875,8 @@ export function AdminDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
-                  {products
-                    .filter((p) => {
+                  {(() => {
+                    const filtered = products.filter((p) => {
                       if (productCatFilter !== 'all' && p.categoryId !== productCatFilter) {
                         return false;
                       }
@@ -874,8 +887,20 @@ export function AdminDashboard() {
                         }
                       }
                       return true;
-                    })
-                    .map((prod) => (
+                    });
+
+                    if (filtered.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={7} className="py-12 text-center text-slate-400">
+                            <p className="font-bold text-sm text-slate-300">Nenhum produto cadastrado no momento</p>
+                            <p className="text-xs text-slate-500 mt-1">Clique no botão &quot;Cadastrar Novo Produto&quot; acima para adicionar seu primeiro produto real.</p>
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    return filtered.map((prod) => (
                       <tr key={prod.id} className="hover:bg-slate-850/50">
                         <td className="py-3 font-mono font-bold text-blue-300">{prod.code}</td>
                         <td className="py-3">
@@ -946,7 +971,8 @@ export function AdminDashboard() {
                           </div>
                         </td>
                       </tr>
-                    ))}
+                    ));
+                  })()}
                 </tbody>
               </table>
             </div>
@@ -1109,41 +1135,50 @@ export function AdminDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
-                  {quotes.map((q) => {
-                    const qStatus = QUOTE_STATUS_MAP[q.status] || {
-                      label: q.status,
-                      bg: 'bg-slate-800',
-                      text: 'text-slate-300',
-                    };
-                    return (
-                      <tr key={q.id} className="hover:bg-slate-850/50">
-                        <td className="py-3 font-bold text-white">{q.quoteNumber}</td>
-                        <td className="py-3">
-                          <p className="font-semibold text-white">{q.customerName}</p>
-                          <p className="text-[11px] text-slate-400">{q.customerWhatsapp || q.customerPhone}</p>
-                        </td>
-                        <td className="py-3 text-slate-400">{formatDateBR(q.createdAt)}</td>
-                        <td className="py-3">
-                          <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${qStatus.bg} ${qStatus.text}`}
-                          >
-                            {qStatus.label}
-                          </span>
-                        </td>
-                        <td className="py-3 font-black text-blue-300">{formatBRL(q.total)}</td>
-                        <td className="py-3 text-right">
-                          {q.status !== 'convertido' && (
-                            <button
-                              onClick={() => handleConvertQuote(q)}
-                              className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md transition-all"
+                  {quotes.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-12 text-center text-slate-400">
+                        <p className="font-bold text-sm text-slate-300">Nenhum orçamento solicitado ainda</p>
+                        <p className="text-xs text-slate-500 mt-1">Quando os clientes solicitarem orçamentos pela loja ou WhatsApp, eles serão listados aqui.</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    quotes.map((q) => {
+                      const qStatus = QUOTE_STATUS_MAP[q.status] || {
+                        label: q.status,
+                        bg: 'bg-slate-800',
+                        text: 'text-slate-300',
+                      };
+                      return (
+                        <tr key={q.id} className="hover:bg-slate-850/50">
+                          <td className="py-3 font-bold text-white">{q.quoteNumber}</td>
+                          <td className="py-3">
+                            <p className="font-semibold text-white">{q.customerName}</p>
+                            <p className="text-[11px] text-slate-400">{q.customerWhatsapp || q.customerPhone}</p>
+                          </td>
+                          <td className="py-3 text-slate-400">{formatDateBR(q.createdAt)}</td>
+                          <td className="py-3">
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${qStatus.bg} ${qStatus.text}`}
                             >
-                              Converter em Pedido
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                              {qStatus.label}
+                            </span>
+                          </td>
+                          <td className="py-3 font-black text-blue-300">{formatBRL(q.total)}</td>
+                          <td className="py-3 text-right">
+                            {q.status !== 'convertido' && (
+                              <button
+                                onClick={() => handleConvertQuote(q)}
+                                className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md transition-all"
+                              >
+                                Converter em Pedido
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
@@ -1167,17 +1202,26 @@ export function AdminDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
-                  {customers.map((c) => (
-                    <tr key={c.id} className="hover:bg-slate-850/50">
-                      <td className="py-3 font-bold text-white">{c.name}</td>
-                      <td className="py-3">
-                        <p>{c.phone}</p>
-                        <p className="text-[11px] text-slate-400">{c.email}</p>
+                  {customers.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="py-12 text-center text-slate-400">
+                        <p className="font-bold text-sm text-slate-300">Nenhum cliente cadastrado no momento</p>
+                        <p className="text-xs text-slate-500 mt-1">Os clientes que se cadastrarem ou solicitarem pedidos na loja aparecerão aqui.</p>
                       </td>
-                      <td className="py-3">{c.city} / {c.state}</td>
-                      <td className="py-3 text-slate-400">{formatDateBR(c.createdAt)}</td>
                     </tr>
-                  ))}
+                  ) : (
+                    customers.map((c) => (
+                      <tr key={c.id} className="hover:bg-slate-850/50">
+                        <td className="py-3 font-bold text-white">{c.name}</td>
+                        <td className="py-3">
+                          <p>{c.phone}</p>
+                          <p className="text-[11px] text-slate-400">{c.email}</p>
+                        </td>
+                        <td className="py-3">{c.city} / {c.state}</td>
+                        <td className="py-3 text-slate-400">{formatDateBR(c.createdAt)}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -1211,32 +1255,39 @@ export function AdminDashboard() {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-            {coupons.map((cp) => (
-              <div
-                key={cp.id}
-                className="p-4 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-between"
-              >
-                <div>
-                  <span className="font-mono font-black text-base text-blue-300">{cp.code}</span>
-                  <p className="text-xs text-emerald-400 font-bold mt-0.5">
-                    {cp.discountType === 'percentage' ? `${cp.discountValue}% OFF` : `${formatBRL(cp.discountValue)} OFF`}
-                  </p>
-                </div>
-                <button
-                  onClick={() => {
-                    if (confirm(`Excluir cupom ${cp.code}?`)) {
-                      deleteCoupon(cp.id);
-                      triggerRefresh();
-                    }
-                  }}
-                  className="p-1.5 rounded-lg bg-rose-600/20 text-rose-300"
+          {coupons.length === 0 ? (
+            <div className="py-12 px-4 text-center rounded-2xl bg-slate-900 border border-slate-800 text-slate-400">
+              <p className="font-bold text-sm text-slate-300">Nenhum cupom de desconto criado ainda</p>
+              <p className="text-xs text-slate-500 mt-1">Clique em &quot;Novo Cupom&quot; para criar códigos promocionais para seus clientes.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              {coupons.map((cp) => (
+                <div
+                  key={cp.id}
+                  className="p-4 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-between"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ))}
-          </div>
+                  <div>
+                    <span className="font-mono font-black text-base text-blue-300">{cp.code}</span>
+                    <p className="text-xs text-emerald-400 font-bold mt-0.5">
+                      {cp.discountType === 'percentage' ? `${cp.discountValue}% OFF` : `${formatBRL(cp.discountValue)} OFF`}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (confirm(`Excluir cupom ${cp.code}?`)) {
+                        deleteCoupon(cp.id);
+                        triggerRefresh();
+                      }
+                    }}
+                    className="p-1.5 rounded-lg bg-rose-600/20 text-rose-300"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

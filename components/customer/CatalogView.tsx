@@ -215,7 +215,17 @@ export function CatalogView({
       </div>
 
       {/* Products Grid */}
-      {filteredProducts.length === 0 ? (
+      {products.length === 0 ? (
+        <div className="py-20 px-4 text-center rounded-3xl bg-gradient-to-b from-slate-900/60 via-blue-950/40 to-slate-900/60 border border-blue-900/40 space-y-4">
+          <div className="w-16 h-16 rounded-2xl bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400 mx-auto shadow-lg">
+            <Sparkles className="w-8 h-8" />
+          </div>
+          <h3 className="font-extrabold text-xl text-white">Nenhum produto cadastrado ainda</h3>
+          <p className="text-xs sm:text-sm text-slate-300 max-w-md mx-auto leading-relaxed">
+            O catálogo está pronto e limpo para receber os seus produtos reais. Acesse o <strong>Painel do Administrador (MauricioM2M)</strong> no topo para cadastrar suas camisetas, bonés, moletons, canecas e uniformes.
+          </p>
+        </div>
+      ) : filteredProducts.length === 0 ? (
         <div className="py-16 text-center rounded-3xl bg-slate-900/40 border border-slate-800 space-y-4">
           <div className="w-16 h-16 rounded-2xl bg-slate-800 flex items-center justify-center text-slate-500 mx-auto">
             <Filter className="w-8 h-8" />
@@ -226,7 +236,7 @@ export function CatalogView({
           </p>
           <button
             onClick={clearAllFilters}
-            className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg"
+            className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs shadow-lg"
           >
             Ver Todos os Produtos
           </button>

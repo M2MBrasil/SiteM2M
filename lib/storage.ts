@@ -41,7 +41,7 @@ export interface AppDatabase {
   coupons: Coupon[];
 }
 
-const STORAGE_KEY = 'm2m_brasil_db_v1';
+const STORAGE_KEY = 'm2m_brasil_clean_db_v1';
 
 // In-memory runtime state
 let currentDb: AppDatabase | null = null;
@@ -59,38 +59,7 @@ export function getInitialDatabase(): AppDatabase {
     sizes: INITIAL_SIZES,
     users: INITIAL_USERS,
     logs: INITIAL_LOGS,
-    coupons: [
-      {
-        id: 'cp-1',
-        code: 'PRIMEIRACOMPRA',
-        discountType: 'percentage',
-        discountValue: 10,
-        minOrderValue: 100,
-        usageCount: 14,
-        active: true,
-        createdAt: new Date().toISOString(),
-      },
-      {
-        id: 'cp-2',
-        code: 'M2M20',
-        discountType: 'percentage',
-        discountValue: 20,
-        minOrderValue: 250,
-        usageCount: 8,
-        active: true,
-        createdAt: new Date().toISOString(),
-      },
-      {
-        id: 'cp-3',
-        code: 'FRETEGRATIS',
-        discountType: 'fixed',
-        discountValue: 25,
-        minOrderValue: 200,
-        usageCount: 31,
-        active: true,
-        createdAt: new Date().toISOString(),
-      },
-    ],
+    coupons: [],
   };
 }
 
